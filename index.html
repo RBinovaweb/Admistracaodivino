@@ -35,25 +35,27 @@ button{background:#e91e63;color:#fff;border:none;cursor:pointer}
 
 <!-- REGISTRO -->
 <div class="card">
-<h3>📝 Registrar Venda</h3>
+<h3 id="tituloForm">📝 Registrar Venda</h3>
 <div class="grid">
 <select id="produto"></select>
 <select id="tamanho"></select>
 <input id="quantidade" type="number" min="1" value="1">
 <select id="pagamento">
-<option>Pix</option><option>Dinheiro</option><option>Cartão</option>
+<option>Pix</option>
+<option>Dinheiro</option>
+<option>Cartão</option>
 </select>
 </div>
 <p><b>Total:</b> R$ <span id="valorFinal">0.00</span></p>
-<button onclick="registrarVenda()">Registrar Venda</button>
+<button onclick="salvarVenda()">Salvar Venda</button>
 </div>
 
 <!-- RESUMO -->
 <div class="grid">
 <div class="card resumo">💰 Hoje<br>R$ <span id="totalHoje">0.00</span></div>
-<div class="card resumo">📆 Semana<br>R$ <span id="totalSemana">0.00</span></div>
-<div class="card resumo">🗓️ Mês<br>R$ <span id="totalMes">0.00</span></div>
-<div class="card resumo">🍧 Açaís<br><span id="qtdMes">0</span></div>
+<div class="card resumo">📆 Últimos 7 dias<br>R$ <span id="totalSemana">0.00</span></div>
+<div class="card resumo">🗓️ Mês atual<br>R$ <span id="totalMes">0.00</span></div>
+<div class="card resumo">🍧 Açaís vendidos<br><span id="qtdMes">0</span></div>
 </div>
 
 <!-- AÇÕES -->
@@ -84,6 +86,7 @@ button{background:#e91e63;color:#fff;border:none;cursor:pointer}
 </div>
 
 <script>
+/* ================= DADOS ================= */
 const produtos={
 "Morango Love 🍓":{300:15,500:20},
 "Tradicional":{300:15,500:20},
@@ -93,147 +96,213 @@ const produtos={
 "Paçoca 🥜":{300:15,500:20}
 };
 
-const produtoSel=document.getElementById("produto");
-const tamanhoSel=document.getElementById("tamanho");
-const qtdInput=document.getElementById("quantidade");
-const valorFinal=document.getElementById("valorFinal");
+let vendas = JSON.parse(localStorage.getItem("vendas")) || [];
+let editIndex = null;
 
-produtoSel.innerHTML="<option value=''>Produto</option>"+
+/* ================= ELEMENTOS ================= */
+const produtoSel = document.getElementById("produto");
+const tamanhoSel = document.getElementById("tamanho");
+const qtdInput = document.getElementById("quantidade");
+const pagamentoSel = document.getElementById("pagamento");
+const valorFinalEl = document.getElementById("valorFinal");
+
+/* ================= INIT ================= */
+produtoSel.innerHTML = "<option value=''>Produto</option>" +
 Object.keys(produtos).map(p=>`<option>${p}</option>`).join("");
 
-produtoSel.onchange=()=>{
-tamanhoSel.innerHTML="<option>Tamanho</option>";
-if(produtoSel.value){
-Object.keys(produtos[produtoSel.value]).forEach(t=>{
-tamanhoSel.innerHTML+=`<option value="${t}">${t}ml</option>`;
-});
-}
-calcular();
+produtoSel.onchange = ()=>{
+    tamanhoSel.innerHTML="<option value=''>Tamanho</option>";
+    if(produtoSel.value){
+        Object.keys(produtos[produtoSel.value])
+        .forEach(t=>tamanhoSel.innerHTML+=`<option value="${t}">${t}ml</option>`);
+    }
+    calcularTotal();
 };
 
-[tamanhoSel,qtdInput].forEach(e=>e.oninput=calcular);
+[tamanhoSel, qtdInput].forEach(el=>el.oninput = calcularTotal);
 
-function calcular(){
-if(produtoSel.value&&tamanhoSel.value){
-valorFinal.innerText=(produtos[produtoSel.value][tamanhoSel.value]*qtdInput.value).toFixed(2);
-}else valorFinal.innerText="0.00";
+/* ================= FUNÇÕES ================= */
+function calcularTotal(){
+    if(produtoSel.value && tamanhoSel.value){
+        const preco = produtos[produtoSel.value][tamanhoSel.value];
+        const qtd = parseInt(qtdInput.value) || 1;
+        valorFinalEl.innerText = (preco * qtd).toFixed(2);
+    }else{
+        valorFinalEl.innerText = "0.00";
+    }
 }
 
-let vendas=JSON.parse(localStorage.getItem("vendas"))||[];
+function salvarVenda(){
+    if(!produtoSel.value || !tamanhoSel.value){
+        alert("Selecione produto e tamanho");
+        return;
+    }
 
-function registrarVenda(){
-if(!produtoSel.value||!tamanhoSel.value)return alert("Selecione produto e tamanho");
-vendas.push({
-produto:produtoSel.value,
-tamanho:tamanhoSel.value,
-quantidade:+qtdInput.value,
-pagamento:pagamento.value,
-valor:+valorFinal.innerText,
-data:new Date().toISOString()
-});
-salvar();
-}
+    const venda = {
+        produto: produtoSel.value,
+        tamanho: tamanhoSel.value,
+        quantidade: parseInt(qtdInput.value),
+        pagamento: pagamentoSel.value,
+        valor: produtos[produtoSel.value][tamanhoSel.value] * parseInt(qtdInput.value),
+        data: new Date().toISOString()
+    };
 
-function salvar(){
-localStorage.setItem("vendas",JSON.stringify(vendas));
-atualizar();
-}
+    if(editIndex !== null){
+        vendas[editIndex] = venda;
+        editIndex = null;
+        document.getElementById("tituloForm").innerText = "📝 Registrar Venda";
+    }else{
+        vendas.push(venda);
+    }
 
-function excluirVenda(i){
-if(confirm("Excluir esta venda?")){
-vendas.splice(i,1);
-salvar();
-}
+    limparFormulario();
+    persistir();
 }
 
 function editarVenda(i){
-const v=vendas[i];
-produtoSel.value=v.produto;
-produtoSel.onchange();
-tamanhoSel.value=v.tamanho;
-qtdInput.value=v.quantidade;
-pagamento.value=v.pagamento;
-valorFinal.innerText=v.valor.toFixed(2);
-vendas.splice(i,1);
-salvar();
+    const v = vendas[i];
+    produtoSel.value = v.produto;
+    produtoSel.onchange();
+    tamanhoSel.value = v.tamanho;
+    qtdInput.value = v.quantidade;
+    pagamentoSel.value = v.pagamento;
+    valorFinalEl.innerText = v.valor.toFixed(2);
+    editIndex = i;
+    document.getElementById("tituloForm").innerText = "✏️ Editar Venda";
 }
 
+function excluirVenda(i){
+    if(confirm("Excluir esta venda?")){
+        vendas.splice(i,1);
+        persistir();
+    }
+}
+
+function limparFormulario(){
+    produtoSel.value="";
+    tamanhoSel.innerHTML="<option value=''>Tamanho</option>";
+    qtdInput.value=1;
+    valorFinalEl.innerText="0.00";
+}
+
+function persistir(){
+    localStorage.setItem("vendas", JSON.stringify(vendas));
+    atualizarPainel();
+}
+
+/* ================= BACKUP ================= */
 function exportarBackup(){
-const blob=new Blob([JSON.stringify(vendas)],{type:"application/json"});
-const a=document.createElement("a");
-a.href=URL.createObjectURL(blob);
-a.download="backup-vendas.json";
-a.click();
+    const blob = new Blob([JSON.stringify(vendas)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="backup-vendas-divino-acai.json";
+    a.click();
 }
 
 function importarBackup(e){
-const r=new FileReader();
-r.onload=()=>{vendas=JSON.parse(r.result);salvar();}
-r.readAsText(e.target.files[0]);
+    const reader = new FileReader();
+    reader.onload = ()=>{
+        try{
+            const dados = JSON.parse(reader.result);
+            if(Array.isArray(dados)){
+                vendas = dados;
+                persistir();
+            }else alert("Arquivo inválido");
+        }catch{
+            alert("Erro ao importar backup");
+        }
+    };
+    reader.readAsText(e.target.files[0]);
 }
 
-let graficoPagamento,graficoDias;
+/* ================= PAINEL ================= */
+let graficoPagamento, graficoDias;
 
-function atualizar(){
-const hoje=new Date();
-let totalHoje=0,totalSemana=0,totalMes=0,qtdMes=0;
-let pagamentos={Pix:0,Dinheiro:0,Cartão:0};
-let porDia={},ranking={};
+function atualizarPainel(){
+    const hoje = new Date();
+    let totalHoje=0, totalSemana=0, totalMes=0, qtdMes=0;
+    let pagamentos={Pix:0,Dinheiro:0,Cartão:0};
+    let porDia={}, ranking={};
 
-listaVendas.innerHTML="";
-rankingEl.innerHTML="";
+    listaVendas.innerHTML="";
+    rankingEl.innerHTML="";
 
-vendas.forEach((v,i)=>{
-const d=new Date(v.data);
-const diff=(hoje-d)/86400000;
-if(d.toDateString()===hoje.toDateString())totalHoje+=v.valor;
-if(diff<=7)totalSemana+=v.valor;
-if(d.getMonth()===hoje.getMonth()){totalMes+=v.valor;qtdMes+=v.quantidade;}
-pagamentos[v.pagamento]+=v.valor;
-porDia[d.getDate()]=(porDia[d.getDate()]||0)+v.valor;
-ranking[v.produto]=(ranking[v.produto]||0)+v.quantidade;
+    vendas.forEach((v,i)=>{
+        const d = new Date(v.data);
+        const diffDias = Math.floor((hoje - d) / 86400000);
 
-listaVendas.innerHTML+=`
-<div class="venda">
-${d.toLocaleDateString()} • ${v.produto} ${v.tamanho}ml x${v.quantidade} • R$ ${v.valor.toFixed(2)}
-<span class="acoes">
-<button onclick="editarVenda(${i})">✏️</button>
-<button onclick="excluirVenda(${i})">🗑️</button>
-</span>
-</div>`;
-});
+        if(d.toDateString() === hoje.toDateString()) totalHoje += v.valor;
+        if(diffDias <= 6) totalSemana += v.valor;
+        if(d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear()){
+            totalMes += v.valor;
+            qtdMes += v.quantidade;
+        }
 
-Object.entries(ranking).sort((a,b)=>b[1]-a[1])
-.forEach(r=>rankingEl.innerHTML+=`<div class="rank-item">${r[0]} — ${r[1]}</div>`);
+        pagamentos[v.pagamento] += v.valor;
+        porDia[d.getDate()] = (porDia[d.getDate()] || 0) + v.valor;
+        ranking[v.produto] = (ranking[v.produto] || 0) + v.quantidade;
 
-totalHojeEl.innerText=totalHoje.toFixed(2);
-totalSemanaEl.innerText=totalSemana.toFixed(2);
-totalMesEl.innerText=totalMes.toFixed(2);
-qtdMesEl.innerText=qtdMes;
+        listaVendas.innerHTML += `
+        <div class="venda">
+        ${d.toLocaleDateString()} • ${v.produto} ${v.tamanho}ml x${v.quantidade}
+        • R$ ${v.valor.toFixed(2)}
+        <span class="acoes">
+        <button onclick="editarVenda(${i})">✏️</button>
+        <button onclick="excluirVenda(${i})">🗑️</button>
+        </span>
+        </div>`;
+    });
 
-atualizarGraficos(pagamentos,porDia);
+    totalHojeEl.innerText = totalHoje.toFixed(2);
+    totalSemanaEl.innerText = totalSemana.toFixed(2);
+    totalMesEl.innerText = totalMes.toFixed(2);
+    qtdMesEl.innerText = qtdMes;
+
+    Object.entries(ranking).sort((a,b)=>b[1]-a[1])
+    .forEach(r=>rankingEl.innerHTML+=`<div class="rank-item">${r[0]} — ${r[1]}</div>`);
+
+    atualizarGraficos(pagamentos, porDia);
 }
 
+/* ================= GRÁFICOS ================= */
 function atualizarGraficos(p,pd){
-if(graficoPagamento)graficoPagamento.destroy();
-if(graficoDias)graficoDias.destroy();
+    if(graficoPagamento) graficoPagamento.destroy();
+    if(graficoDias) graficoDias.destroy();
 
-graficoPagamento=new Chart(graficoPagamentoEl,{type:'pie',data:{labels:Object.keys(p),datasets:[{data:Object.values(p)}]}});
-graficoDias=new Chart(graficoDiasEl,{type:'bar',data:{labels:Object.keys(pd),datasets:[{data:Object.values(pd)}]}});
+    graficoPagamento = new Chart(graficoPagamentoEl,{
+        type:'pie',
+        data:{labels:Object.keys(p),datasets:[{data:Object.values(p)}]}
+    });
+
+    graficoDias = new Chart(graficoDiasEl,{
+        type:'bar',
+        data:{labels:Object.keys(pd),datasets:[{data:Object.values(pd)}]}
+    });
 }
 
+/* ================= PDF ================= */
 function exportarPDF(){
-const {jsPDF}=window.jspdf;
-const pdf=new jsPDF();
-let y=10;
-pdf.text("Relatório de Vendas - Divino Açaí",10,y);y+=10;
-vendas.forEach(v=>{
-pdf.text(`${new Date(v.data).toLocaleDateString()} ${v.produto} ${v.tamanho}ml x${v.quantidade} R$ ${v.valor}`,10,y);
-y+=7;if(y>280){pdf.addPage();y=10;}
-});
-pdf.save("relatorio-vendas.pdf");
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF();
+
+    let totalGeral = vendas.reduce((s,v)=>s+v.valor,0);
+    let y = 15;
+
+    pdf.text("Relatório de Vendas - Divino Açaí VV",10,y); y+=10;
+    pdf.text(`Total Geral: R$ ${totalGeral.toFixed(2)}`,10,y); y+=10;
+
+    vendas.forEach(v=>{
+        pdf.text(
+        `${new Date(v.data).toLocaleDateString()} - ${v.produto} ${v.tamanho}ml x${v.quantidade} - R$ ${v.valor.toFixed(2)}`,
+        10,y);
+        y+=7;
+        if(y>280){pdf.addPage();y=15;}
+    });
+
+    pdf.save("relatorio-vendas-divino-acai.pdf");
 }
 
+/* ================= VARS ================= */
 const totalHojeEl=document.getElementById("totalHoje");
 const totalSemanaEl=document.getElementById("totalSemana");
 const totalMesEl=document.getElementById("totalMes");
@@ -243,8 +312,10 @@ const rankingEl=document.getElementById("ranking");
 const graficoPagamentoEl=document.getElementById("graficoPagamento");
 const graficoDiasEl=document.getElementById("graficoDias");
 
-atualizar();
+/* ================= START ================= */
+atualizarPainel();
 </script>
 
 </body>
-</html>
+  </html>
+  
